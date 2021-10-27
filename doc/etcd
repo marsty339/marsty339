@@ -1,0 +1,171 @@
+1     背景说明
+由于一些不可抗力的因素，k8s中master节点运行的主机可能会遇到磁盘损坏、被人误操作删除等导致机器无法启动或者恢复的问题，需要提供一个快速恢复master节点的法。注意：本方案旨在快速恢复集群和客户业务。
+2     方案概述
+如果需要快速恢复master节点可用，则快速将master节点恢复到k8s集群是关键，因此，可借助iaas主机的快照，将损坏的master节点快速还原到过去的某一个时间点启动，恢复到k8s集群中，然后根据master节点的损坏个数不同，可依靠其余存活节点的etcd将新加入的master节点的etcd恢复到最新数据即可。若master节点全部损坏，可依赖异地备份的etcd数据，还原整个etcd数据即可。
+3     备份要求
+每次升级完平台，需要对集群的所有master节点进行一次快照备份。
+平台的etcd备份的数据需要有异地备份的机制。
+master节点的/etc/kubernetes目录也需要进行异地备份。
+master节点的ip不能更换。
+4     节点恢复
+根据损坏节点个数不同，分三种情况提供恢复方案
+一个master损坏
+两个master损坏
+三个master损坏
+4.1           一个master损坏
+操作步骤：
+4.1.1         分别在存活的两个master节点执行如下命令备份etcd
+mkdir  -p  /backup_$(date +%Y%m%d%H)
+cp  -r  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/
+ 
+4.1.2         使用iaas机器快照将损坏的master节点还原到最近一次的时间节点
+4.1.3         登录损坏的master节点执行如下命令备份原数据目录并修改etcd的yaml文件配置
+mkdir  -p  /backup_$(date +%Y%m%d%H)/old-etcd/
+
+systemctl stop kubelet
+
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+
+mv  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/old-etcd/
+cp -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/old-etcd/
+
+###注意，需要将如下三个ip换为环境实际的master节点ip。
+export ETCD_1=1.1.1.1
+export ETCD_2=2.2.2.2
+export ETCD_3=3.3.3.3
+
+
+sed -i s'/initial-cluster=.*/initial-cluster='${ETCD_1}'=https:\/\/'${ETCD_1}':2380,'${ETCD_2}'=https:\/\/'${ETCD_2}':2380,'${ETCD_3}'=https:\/\/'${ETCD_3}':2380/g' /etc/kubernetes/manifests/etcd.yaml
+
+sed  -i   /initial-cluster-state=/d   /etc/kubernetes/manifests/etcd.yaml
+
+sed  -i  '/initial-cluster=/a\    - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+4.1.4         登录存活的任意一个master节点，执行如下命令：
+将损坏的master节点在etcd集群中移除并重新加入
+export damage_etcd=1.1.1.1  ##需要将1.1.1.1改为环境实际损坏的节点ip
+
+docker cp $(docker ps | grep -w etcd | awk '{print $1}'):/usr/local/bin/etcdctl /usr/bin/
+
+export ETCDCTL_API=3
+
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member list | grep $damage_etcd | awk -F \, '{print $1}'
+
+
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member  remove  $(etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member list | grep $damage_etcd | awk -F \, '{print $1}')
+
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member  add        $damage_etcd   --peer-urls=https://$damage_etcd:2380
+
+ 
+执行命令检查新增节点状态为unstarted
+export ETCDCTL_API=3
+
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member list
+4.1.5         登录损坏的master节点，执行如下命令恢复
+systemctl  restart kubelet
+docker ps -a | grep etcd
+
+##等待etcd的pod启动然后检查kube-system下的pod正常即可
+kubectl get po -n kube-system
+ 
+4.2           两个master损坏
+4.2.1         登录存活的master节点执行如下命令备份etcd
+systemctl stop kubelet
+
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+\cp  -r  /var/lib/etcd/member/snap/db  /tmp/snapshot.db
+
+mkdir  -p  /backup_$(date +%Y%m%d%H)
+mv  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/
+cp -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/
+ 
+4.2.2         使用iaas机器快照将损坏的两个master节点还原到最近一次的时间节点
+4.2.3         登录损坏的两个master节点分别执行如下命令备份原数据目录并修改etcd的yaml配置
+mkdir  -p  /backup_$(date +%Y%m%d%H)/old-etcd/
+
+systemctl stop kubelet
+
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+
+mv  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/old-etcd/
+cp  -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/old-etcd/
+
+sed  -i   /initial-cluster-state=/d   /etc/kubernetes/manifests/etcd.yaml
+
+sed  -i  '/initial-cluster=/a\    - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+4.2.4         登录存活的master节点，执行如下命令恢复etcd
+###注意，需要将如下三个ip换为环境实际的master节点ip。
+
+export ETCD_1=1.1.1.1
+export ETCD_2=2.2.2.2
+export ETCD_3=3.3.3.3
+
+sed  -i   /initial-cluster-state=/d   /etc/kubernetes/manifests/etcd.yaml
+
+sed  -i  '/initial-cluster=/a\    - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+
+for i in "$ETCD_1" "$ETCD_2" "$ETCD_3"
+do
+export ETCDCTL_API=3
+etcdctl snapshot restore /tmp/snapshot.db \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--data-dir=/var/lib/etcd \
+--skip-hash-check \
+--name ${i} \
+--initial-cluster ${ETCD_1}=https://${ETCD_1}:2380,${ETCD_2}=https://${ETCD_2}:2380,${ETCD_3}=https://${ETCD_3}:2380 \
+--initial-advertise-peer-urls https://$i:2380 && \
+mv /var/lib/etcd/ etcd_$i
+done
+
+
+注意：脚本执行完会生成etcd_$i三个目录；
+l 分别在三个master节点执行mkdir /var/lib/etcd/
+l 分别将此三个目录下的member目录拷贝到对应ip的/var/lib/etcd/目录下；
+l 重启本集群所有master以及node节点的kubelet；
+l 检查kube-system下的pod是否恢复即可。
+ 
+4.3           三个master损坏
+4.3.1         使用iaas机器快照将三个损坏的master节点还原到最近一次的时间节点
+4.3.2         分别登录三个损坏的master节点执行如下命令备份数据
+mkdir  -p  /backup_$(date +%Y%m%d%H)/old-etcd/
+
+systemctl stop kubelet
+
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+
+mv  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/old-etcd/
+cp  -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/old-etcd/
+
+sed  -i   /initial-cluster-state=/d   /etc/kubernetes/manifests/etcd.yaml
+
+sed  -i  '/initial-cluster=/a\    - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+4.3.3         将最新异地备份的etcd快照拷贝到第一个master节点的/tmp目录下并命名为snapshot.db
+4.3.4         登录第一个master节点执行如下命令恢复etcd
+###注意，需要将如下三个ip换为环境实际的master节点ip。
+
+export ETCD_1=1.1.1.1
+export ETCD_2=2.2.2.2
+export ETCD_3=3.3.3.3
+
+for i in "$ETCD_1" "$ETCD_2" "$ETCD_3"
+do
+export ETCDCTL_API=3
+etcdctl snapshot restore /tmp/snapshot.db \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--data-dir=/var/lib/etcd \
+--skip-hash-check \
+--name ${i} \
+--initial-cluster ${ETCD_1}=https://${ETCD_1}:2380,${ETCD_2}=https://${ETCD_2}:2380,${ETCD_3}=https://${ETCD_3}:2380 \
+--initial-advertise-peer-urls https://$i:2380 && \
+mv /var/lib/etcd/ etcd_$i
+done
+
+
+注意：脚本执行完会生成etcd_$i三个目录；
+l 分别在三个master节点执行mkdir /var/lib/etcd/
+l 分别将此三个目录下的member目录拷贝到对应ip的/var/lib/etcd/目录下；
+l 重启本集群所有master以及node节点的kubelet；
+检查kube-system下的pod是否恢复即可。
