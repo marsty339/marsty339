@@ -1,0 +1,67 @@
+#下载calicoctl并开启metrics
+export http_proxy="http://192.168.25.117:8118"
+export https_proxy="http://192.168.25.117:8118"
+wget https://github.com/projectcalico/calicoctl/releases/download/v3.15.0/calicoctl -O /usr/local/bin/calicoctl
+ 
+chmod +x calicoctl
+export DATASTORE_TYPE=kubernetes
+export KUBECONFIG=/etc/kubernetes/admin.conf
+ 
+ 
+calicoctl get felixConfiguration default -o yaml
+ 
+#开启prom监控指标
+calicoctl patch felixConfiguration default  --patch '{"spec":{"prometheusMetricsEnabled": true}}'
+ 
+#确保节点9091端口开启
+ 
+#修改ds 在 spec.template.sepc.containers 中加入以下内容：
+kubectl -n kube-system edit ds calico-node
+        ports:
+        - containerPort: 9091
+          name: http-metrics
+          protocol: TCP
+
+#创建svc和servicemonitor
+[root@int-calico-m1-17 ~]# cat calico-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: calico-node
+    service_name: calico-node
+  name: calico-node
+  namespace: kube-system
+spec:
+  ports:
+  - name: metrics
+    port: 9091
+    protocol: TCP
+    targetPort: 9091
+  selector:
+    k8s-app: calico-node
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+[root@int-calico-m1-17 ~]# cat calico-servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: cpaas-monitor
+    chart: cpaas-monitor
+    prometheus: kube-prometheus
+    release: cpaas-monitor
+  name: calico-felix
+  namespace: cpaas-system
+spec:
+  endpoints:
+  - interval: 10s
+    path: metrics
+  namespaceSelector:
+    matchNames:
+    - kube-system
+  selector:
+    matchLabels:
+      k8s-app: calico-node
