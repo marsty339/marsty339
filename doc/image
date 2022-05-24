@@ -1,0 +1,103 @@
+
+1. GitHub 镜像访问
+这里提供两个最常用的镜像地址：
+
+　　https://github.com.cnpmjs.org
+
+https://mp.weixin.qq.com/s/AoFb1UNvlWGhsvwUIdMt7w
+
+kubectl get secret -n cpaas-system cpaas-es -o yaml | grep -v f |grep password: |awk '{print $2}' |base64 -d
+
+背景： 
+作为公司安全规范的一部分，每日发版时都会同时检测漏洞，并要求团队响应。然而漏洞扫描也有其局限，比如只根据版本号判断来警告漏洞（其实可能已被backport修复）。
+通常在容器镜像打包好后，其中的包管理工具、shell 等工具就不再需要了。去除这些工具及其依赖会大大减少组件被扫描出漏洞的机率。减少响应修复漏洞的频率，可以节约出更多的人力在项目开发等方向上，提升效益。
+公司目前在推动全平台组件以非特权用户部署的项目开发，为此需要改变不少组件的镜像编译过程来引入非特权用户。如果统一地将这些组件的基础镜像切换到专为非特权用户创建的镜像上，或许可以节省开发时间。
+需求：
+比较 distroless、minideb 和现有的 alpine、ubuntu、debian 等镜像，分析各种镜像的优缺点、适用场景
+调研将 distroless 和 minideb 纳入运维基础镜像的可行性
+调研内容：
+alpine VS distroless
+alpine 镜像大小为 5.6MB，gcr.io/distroless/static:latest 镜像大小为 2.4MB，补充上 glibc、libssl 和 openssl 的 gcr.io/distroless/base:latest 镜像大小为 20MB（均为未压缩大小）。
+因为用 musl libc 取代 glibc 的关系，使得通过 alpine 镜像编译完全静态连接的二进制文件变得非常容易。
+但反过来这也造成一些只针对 glibc 设计，不便于移植的项目依赖在 alpine 镜像上几乎无法解决，或者软件本身因为不兼容 musl libc 而无法在 alpine 镜像上运行。
+对于这种情况，目前的解决方案是将基础镜像切换成 ubuntu/debian 等基于 glibc 的镜像。而在这次的调研中，distroless 看起来是更加合理的选择。
+比较有说服力的例证是：
+a) k8s 自 2020 年起开始使用 distroless，解决了之前因为 debian 基础镜像每月需要打数次安全补丁导致的频繁发版的问题。同时也极大地减轻了软件镜像的体积；
+b) knative 和 tekton 自立项初就通过 distroless 的 nonroot 镜像提高自身的安全实践。
+debian/ubuntu VS minideb
+ubuntu:focal 镜像大小为 73MB，debian:bullseye-slim 镜像大小为 80MB（均为未压缩大小）。从比较两个镜像默认安装的软件包区别入手，发现这两种镜像都存在一些难以理解的打包策略：
+左侧为 debian 镜像才包含的软件包。在 diff 命令输出的 gcc-9-base 软件包之外，两个镜像都包含 gcc-10-base 软件包。尝试 apt purge --autoremove gcc-9-base，发现并没有任何软件包依赖这个包。
+另外还有 e2fsprogs 这个软件包，似乎没有很大的实用意义。
+右侧为 ubuntu 镜像才包含的软件包。fdisk 这个软件包似乎没有很大的实用意义。
+debian（左）与ubuntu镜像默认安装软件包的对比  展开源码
+bitnami/minideb:bullseye 镜像大小为 78MB（未压缩）。相比 debian 镜像，bitnami/minideb 镜像删除和添加了以下软件包，个人认为是比较合理的取舍：
+debian（左）与minideb镜像默认安装的软件包对比  展开源码
+minideb 最大的改变在于精简了关于语言和地区（locales）、使用文档及手册方面的内容，并对软件包的安装过程提供了优化。
+这里的优化可以从两个方面来说。其一是 install_packages 命令，可避免任何交互式提示（prompts）挂起安装过程，无需设置环境变量；自动在安装完软件包后清除 apt 缓存；当 apt 命令失败时发起重试，避免网络波动导致流水线失败。
+其二是对 dpkg、apt 等软件的特别配置（参考自 官方源码 (github.com) ），如打开 force-unsafe-io 开关（能大大提升执行速度）、对 apt 元数据开启 gzip 压缩等等……
+此外，minideb 镜像每天都会更新，这有助于及时应用那些在两次 Debian 官方镜像更新期间发布的补丁。
+这一点有助于减轻运维团队维护 debian 镜像时的任务量（然而 Debian 官方并不是对每个 CVE 都会修复，因此要让漏洞扫描工具完全沉默可能难免还是有额外的工作要做）
+调研结论：
+alpine
+distroless
+ubuntu/debian
+minideb
+包管理工具	apk	无	apt	apt
+SHELL	ash	无（可切换 debug 镜像，提供 busybox shell）	bash	bash
+冗余软件包 *^1^	✅无	✅无	gcc-9-base、e2fsprogs 等	fdisk 等
+其他冗余文件 *^2^	✅无	✅无	有	✅无
+C 运行时环境	musl libc	无（可切换 base 镜像，提供 glibc 和 openssl 依赖）	glibc	glibc
+编程语言支持（编译环境）	golang, rust, nodejs, python, java	（仅运行环境）golang, rust, nodejs, python *^3^, java	golang, rust, nodejs, python, java	golang, rust, nodejs, python, java
+漏洞更新策略	从修复版本发布到镜像更新无时间保证	✅❓每天一次自动检查软件更新，发起 PR（更新到镜像无时间保证）	从修复版本发布到镜像更新无时间保证	✅在修复版本发布后 24 小时内更新到镜像
+non-root 镜像	无	✅有	无	无
+镜像大小（压缩前）	5.4MB	2.4MB（base 镜像 20MB）	~80MB	78MB
+其他	*4			*5 *6
+1 Packages that aren’t often used in containers (hardware related, init systems etc.)
+2 Some files that aren’t usually required (docs, man pages, locales, caches)
+3 The gcr.io/distroless/python3-debian11 images are considered experimental and not recommended for production usage
+4 alpine 可通过安装 gcompat 软件包来解决部分软件依赖 glibc 导致的问题。然而 gcompat 并非十分完全的 glibc 解决方案，从我的使用经历来看很容易遇到 gcompat 也无法解决的问题。
+5 提供 install_packages 命令，可避免任何交互式提示（prompts）挂起安装过程，无需设置环境变量；自动在安装完软件包后清除 apt 缓存；当 apt 命令失败时发起重试，避免网络波动导致流水线失败。
+6 对 dpkg、apt 等软件的特别配置（可参见 源码 ）。如打开 force-unsafe-io 开关（能大大提升执行速度）、对 apt 元数据开启 gzip 压缩等等……
+基于以上调研结论，笔者提出以下建议，希望与各位同事讨论：
+1. 建议运维团队考虑用 minideb 取代 debian 镜像，作为维护的内部 debian 镜像的基础镜像
+理由是 install_packages 命令非常方便，可以避免在 dockerfile 中忘记、错误清除 apt 缓存的问题，也能避免网络波动造成流水线失败；漏洞修复更加及时）
+2. 建议运维团队考虑将 distroless 的各镜像（列表下详）纳入维护、发布的范围中，提供给研发团队使用
+（distroless 的 nonroot 镜像对之后实现非特权用户部署有帮助，但运维同事可能要辛苦自定义一下 UID 为 600-699 来重新编译，以满足光大的特殊需要）
+3. 在建议 1 实现的前提下，对研发团队，建议在 ubuntu 镜像和 debian 镜像中优先选择 debian 镜像。
+（理由是该镜像更不容易受到漏洞的影响。并且如果最终能达成完全用 debian 镜像替代 ubuntu 镜像，又可以为发版的压缩包进一步减重）
+4. 多利用多阶段构建的方式，在组件编译阶段使用 debian/alpine 镜像，在打包时优先选择 distroless 相关的基础镜像
+（理由是该做法可以大大降低未来需要响应漏洞修复的概率，能省下人力和时间到其他开发任务上）
+5. 对于使用 distroless 镜像打包的组件，考虑到发版后排查故障的调试需要，建议在整个生命周期都使用有 debug 标签的镜像。
+6. 如果组件运行需要 distroless 镜像中没有包含的软件包，需要请运维团队在发布内部 distroless 镜像时提前添加进去。对于已经发布的镜像，因为没有包管理器，安装软件是比较困难的。
+
+docker pull gcr.io/distroless/base
+docker pull gcr.io/distroless/base-debian10
+docker pull gcr.io/distroless/base-debian11
+docker pull gcr.io/distroless/base-debian9
+docker pull gcr.io/distroless/cc
+docker pull gcr.io/distroless/cc-debian10
+docker pull gcr.io/distroless/cc-debian11
+docker pull gcr.io/distroless/cc-debian9
+docker pull gcr.io/distroless/dotnet
+docker pull gcr.io/distroless/dotnet-debian10
+docker pull gcr.io/distroless/dotnet-debian9
+docker pull gcr.io/distroless/java
+docker pull gcr.io/distroless/java-debian10
+docker pull gcr.io/distroless/java-debian11
+docker pull gcr.io/distroless/java-debian9
+docker pull gcr.io/distroless/nodejs
+docker pull gcr.io/distroless/nodejs-debian10
+docker pull gcr.io/distroless/nodejs-debian11
+docker pull gcr.io/distroless/nodejs-debian9
+docker pull gcr.io/distroless/python2.7
+docker pull gcr.io/distroless/python2.7-debian10
+docker pull gcr.io/distroless/python2.7-debian9
+docker pull gcr.io/distroless/python3
+docker pull gcr.io/distroless/python3-debian10
+docker pull gcr.io/distroless/python3-debian11
+docker pull gcr.io/distroless/python3-debian9
+docker pull gcr.io/distroless/static
+docker pull gcr.io/distroless/static-debian10
+docker pull gcr.io/distroless/static-debian11
+docker pull gcr.io/distroless/static-debian9
+对各种镜像基本还会有 latest、debug、nonroot、debug-nonroot 四种标签可以选择，笔者建议至少将这四种镜像 tags 都拉回本地，由运维团队发布给大家使用。
