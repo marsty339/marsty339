@@ -1,0 +1,109 @@
+前置条件
+1、若整个etcd集群损坏，需要存在故障前的etcd快照备份方可恢复
+2、宿主机上需要存在etcdctl命令，若没有可以从etcd的镜像中拷贝etcdctl到宿主机的/usr/bin下
+特别说明
+
+正文
+一、高可用环境单个etcd损坏
+1. 分别在两个 存活的master 节点执行如下命令备份 ETCD。
+mkdir  -p  /backup_$(date +%Y%m%d%H)
+cp  -r  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/
+
+2. 登录损坏的 master 节点执行如下命令，备份原数据目录并修改 ETCD 的 yaml 文件配置。
+mkdir  -p  /backup_$(date +%Y%m%d%H)/old-etcd/
+systemctl stop kubelet
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+
+mv  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/old-etcd/
+cp -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/old-etcd/
+
+###注意，需要将如下三个ip换为环境实际的master节点ip。
+export ETCD_1=1.1.1.1
+export ETCD_2=2.2.2.2
+export ETCD_3=3.3.3.3
+
+
+sed  -i s'/initial-cluster=.*/initial-cluster='${ETCD_1}'=https:\/\/'${ETCD_1}':2380,'${ETCD_2}'=https:\/\/'${ETCD_2}':2380,'${ETCD_3}'=https:\/\/'${ETCD_3}':2380/g' /etc/kubernetes/manifests/etcd.yaml
+sed  -i   /initial-cluster-state=/d   /etc/kubernetes/manifests/etcd.yaml
+sed  -i  '/initial-cluster=/a\    - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+3. 登录存活的任意一个 master 节点，执行如下命令：
+**注意**：将损坏的 master 节点在 ETCD 集群中移除并重新加入，需要将 1.1.1.1 改为环境实际损坏的节点 ip。
+export damage_etcd=1.1.1.1
+docker cp $(docker ps | grep -w etcd | awk '{print $1}'):/usr/local/bin/etcdctl /usr/bin/
+
+export ETCDCTL_API=3
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member list | grep $damage_etcd | awk -F \, '{print $1}'
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member  remove  $(etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member list | grep $damage_etcd | awk -F \, '{print $1}')
+etcdctl   --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --cacert=/etc/kubernetes/pki/etcd/ca.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --endpoints=https://127.0.0.1:2379  member  add        $damage_etcd   --peer-urls=https://$damage_etcd:2380
+4.登录损坏的master节点执行如下命令，等待节点恢复
+systemctl  restart kubelet
+docker ps -a | grep etcd
+
+##等待etcd的pod启动然后检查kube-system下的pod正常即可
+kubectl get po -n kube-system
+二、高可用环境整个etcd集群损坏恢复
+1. 登录所有 master 节点执行如下命令备份原数据目录并修改 ETCD 的 yaml 文件配置。
+mkdir -p /backup_$(date +%Y%m%d%H)/old-etcd/
+systemctl stop kubelet
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+
+mv /var/lib/etcd /backup_$(date +%Y%m%d%H)/old-etcd/
+cp -r /etc/kubernetes/ /backup_$(date +%Y%m%d%H)/old-etcd/
+
+sed -i /initial-cluster-state=/d /etc/kubernetes/manifests/etcd.yaml
+sed -i '/initial-cluster=/a\ - --initial-cluster-state=existing' /etc/kubernetes/manifests/etcd.yaml
+2. 将最新备份的 ETCD 快照拷贝到第一个 master 节点的 /tmp 目录下并命名为 snapshot.db
+3. 登录第一个 master 节点执行如下命令恢复 ETCD。
+###注意，需要将如下三个ip换为环境实际的master节点ip
+
+export ETCD_1=1.1.1.1
+export ETCD_2=2.2.2.2
+export ETCD_3=3.3.3.3
+
+for i in "$ETCD_1" "$ETCD_2" "$ETCD_3"
+do
+export ETCDCTL_API=3
+etcdctl snapshot restore /tmp/snapshot.db \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--data-dir=/var/lib/etcd \
+--name $i \
+--initial-cluster ${ETCD_1}=https://${ETCD_1}:2380,${ETCD_2}=https://${ETCD_2}:2380,${ETCD_3}=https://${ETCD_3}:2380 \
+--initial-advertise-peer-urls https://$i:2380 && \
+mv /var/lib/etcd/ etcd_$i
+done
+
+**提示**：
+
+* 脚本执行完会生成 etcd_$i三个目录。
+
+* 分别在三个 master 节点执行 mkdir /var/lib/etcd/。
+
+* 分别将此三个目录下的 member 目录拷贝到对应 ip 的 /var/lib/etcd/ 目录下。
+
+* 重启本集群所有 master 以及 node 节点的 kubelet。
+
+* 检查 kube-system 下的 pod 是否恢复即可。
+三、非高可用环境etcd集群损坏
+1. 登录master节点执行如下命令备份etcd
+mkdir  -p  /backup_$(date +%Y%m%d%H)
+cp  -r  /var/lib/etcd  /backup_$(date +%Y%m%d%H)/
+mv /var/lib/etcd /backup_$(date +%Y%m%d%H)/etcd-old
+systemctl stop kubelet
+docker ps -a | grep etcd | awk '{print $1}' | xargs docker rm -f
+2. 将最新备份的 ETCD 快照拷贝到master 节点的 /tmp 目录下并命名为 snapshot.db
+3. 登录 master 节点执行如下命令恢复 ETCD。
+###注意，需要将如下ip换为环境实际的master节点ip
+
+ETCD_1=1.1.1.1
+export ETCDCTL_API=3
+etcdctl snapshot restore /tmp/snapshot.db \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--data-dir=/var/lib/etcd \
+--name ${ETCD_1} \
+--initial-cluster ${ETCD_1}=https://${ETCD_1}:2380 \
+--initial-advertise-peer-urls https://${ETCD_1}:2380
+systemctl restart kubelet
