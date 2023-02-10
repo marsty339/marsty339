@@ -1,0 +1,4 @@
+kubectl -n jira create cm setenv --from-file=setenv.sh=./test
+
+cd /opt
+java -jar atlassian-agent.jar -d -m liangjiangji@dongriaf.com -n J -p jira -o http://10.0.5.36  -s B2CR-L5A6-WSC0-LVO9

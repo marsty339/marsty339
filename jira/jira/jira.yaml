@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alauda-jira-atlassian-jira
+  namespace: jira-test
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.alauda.io/name: alauda-jira
+      service.alauda.io/name: deployment-alauda-jira-atlassian-jira
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: deployment-alauda-jira-atlassian-jira
+        app.alauda.io/name: alauda-jira
+        service.alauda.io/name: deployment-alauda-jira-atlassian-jira
+        version: v1
+    spec:
+      containers:
+        - env:
+            - name: JAVA_OPTS
+              value: '-javaagent:/opt/atlassian-agent.jar'
+          image: prod-harbor.alauda.cn/ops/jira/atlassian-jira:v8.4.0
+          imagePullPolicy: IfNotPresent
+          name: atlassian-jira
+          readinessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 50
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: '200m'
+              memory: 4Gi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/atlassian/jira
+              name: new-volume
+            - mountPath: /opt/atlassian/jira/logs
+              name: new-volume1
+            - mountPath: >-
+                /opt/atlassian/jira/atlassian-jira/WEB-INF/classes/templates/jira/issue/field/description-edit.vm
+              name: description
+              subPath: description-edit.vm
+            - mountPath: /opt/atlassian/jira/bin/setenv.sh
+              name: setenv
+              subPath: setenv.sh
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/hostname: 192.168.190.113
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - operator: Exists
+      volumes:
+        - hostPath:
+            path: /data/jira/data
+            type: ''
+          name: new-volume
+        - hostPath:
+            path: /data/jira/logs
+            type: ''
+          name: new-volume1
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: description-edit.vm
+                path: description-edit.vm
+            name: description
+          name: description
+        - configMap:
+            defaultMode: 420
+            name: setenv
+          name: setenv
+ 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alauda-jira-atlassian-jira
+  namespace: jira-test
+spec:
+  ports:
+    - name: tcp-8080-8080
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app.alauda.io/name: alauda-jira
+    service.alauda.io/name: deployment-alauda-jira-atlassian-jira
+  sessionAffinity: None
+  type: ClusterIP

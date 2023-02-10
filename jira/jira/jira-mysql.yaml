@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alauda-mysql-jira-mysql
+  namespace: jira-test
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.alauda.io/name: alauda-mysql-jira
+      service.alauda.io/name: deployment-alauda-mysql-jira-mysql
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: deployment-alauda-mysql-jira-mysql
+        app.alauda.io/name: alauda-mysql-jira
+        service.alauda.io/name: deployment-alauda-mysql-jira-mysql
+        version: v1
+    spec:
+      containers:
+        - env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: root
+            - name: MYSQL_USER
+              value: jira
+            - name: MYSQL_PASSWORD
+              value: jira
+            - name: MYSQL_DATABASE
+              value: jiradb
+          image: prod-harbor.alauda.cn/ops/jira/mysql:5.6
+          imagePullPolicy: IfNotPresent
+          name: mysql
+          resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: mysql-data
+            - mountPath: /etc/mysql/my.cnf
+              name: mysql-cnf
+              readOnly: true
+              subPath: my.cnf
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/hostname: 192.168.190.113
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - operator: Exists
+      volumes:
+        - hostPath:
+            path: /data/mysql/data
+            type: ''
+          name: mysql-data
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: my.cnf
+                path: my.cnf
+            name: mysql
+          name: mysql-cnf
+ 
+ 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alauda-mysql-jira-mysql
+  namespace: jira-test
+spec:
+  ports:
+    - name: tcp-3306-3306
+      port: 3306
+      protocol: TCP
+      targetPort: 3306
+  selector:
+    app.alauda.io/name: alauda-mysql-jira
+    service.alauda.io/name: deployment-alauda-mysql-jira-mysql
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  type: ClusterIP
