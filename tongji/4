@@ -1,0 +1,26 @@
+#!/bin/sh
+charts=`cat ./installer/res/artifacts.json |jq -r '.charts[]|[.repository,.tag|tostring] |join(":")'`
+bundles=`cat ./installer/res/artifacts.json |jq -r '.bundles[]|[.repository,.tag|tostring] |join(":")'`
+label="null"
+for i in $charts;do
+chart="chart"
+tlabel=`echo $i|grep beta`
+team=`echo $i|awk -F '/' '{print $1}'`
+if [ -z $tlabel ];then
+llabel=$label
+else
+llabel="tekton"
+fi
+echo $team,$i,$llabeli,$chart
+done
+for i in $bundles;do
+bundle="bundle"
+tlabel=`echo $i|grep beta`
+team=`echo $i|awk -F '/' '{print $1}'`
+if [ -z $tlabel ];then
+llabel=$label
+else
+llabel="tekton"
+fi
+echo $team,$i,$llabel,$bundle
+done

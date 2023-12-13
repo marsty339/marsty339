@@ -1,0 +1,586 @@
+apiVersion: deliveries.katanomi.dev/v1alpha1
+kind: Delivery
+metadata:
+  annotations:
+    deliveries.katanomi.dev/roleBinding: "true"
+    displayName: ""
+  name: packager-devops-tool-operator
+  namespace: devops
+spec:
+  historyLimits:
+    count: 10
+  params:
+  - default: master
+    name: git-revision
+    type: string
+  runPolicy: Serial
+  stages:
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-harbor
+    params:
+    - name: build-name
+      value: harbor
+    - name: git-revision
+      value: alauda-release-v2.6.4
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: update-gitlab-values
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/devops-tool-operator.git
+    - name: path
+      value: ./charts/gitlab-official/13.12.15/values.yaml
+    runAfter:
+    - check-gitlab
+    - check-gitlab-busybox
+    - check-gitlab-redis
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: update-sonarqube-values
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/devops-tool-operator.git
+    - name: path
+      value: ./charts/sonarqube/8.9.2/values.yaml
+    runAfter:
+    - check-sonarqube
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: update-nexus-values
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/devops-tool-operator.git
+    - name: path
+      value: ./charts/nexus/3.29.2-2/values.yaml
+    runAfter:
+    - check-nexus
+    - check-nexus-proxy
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: update-harbor-values
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/devops-tool-operator.git
+    - name: path
+      value: ./charts/harbor/2.6.4/values.yaml
+    runAfter:
+    - check-harbor
+    - check-harbor-redis
+    - check-harbor-init
+    - check-harbor-devopscli
+    - check-harbor-trivy-offline-db
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: update-jenkins-values
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/devops-tool-operator.git
+    - name: path
+      value: ./charts/jenkins/2.361.4/values.yaml
+    runAfter:
+    - check-jenkins
+    - check-jenkins-javaopenjdk8
+    - check-jenkins-builder-tools
+    - check-jenkins-golang12
+    - check-jenkins-golang13
+    - check-jenkins-golang14
+    - check-jenkins-golang15
+    - check-jenkins-golang16
+    - check-jenkins-nodejs10
+    - check-jenkins-nodejs12
+    - check-jenkins-buildah
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins
+    params:
+    - name: build-name
+      value: jenkins
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-harbor-redis
+    params:
+    - name: build-name
+      value: redis-image
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: middleware-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-harbor-trivy-offline-db
+    params:
+    - name: build-name
+      value: trivy-db
+    - name: git-revision
+      value: 2.6.4
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-harbor-init
+    params:
+    - name: build-name
+      value: busybox
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: ops-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-harbor-devopscli
+    params:
+    - name: build-name
+      value: devops-api-server
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: devops
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-javaopenjdk8
+    params:
+    - name: build-name
+      value: builder-java
+    - name: git-revision
+      value: openjdk8
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-builder-tools
+    params:
+    - name: build-name
+      value: builder-tools
+    - name: git-revision
+      value: $(params.git-revision)
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-golang12
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.12
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-golang13
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.13
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-golang14
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.14
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-golang15
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.15
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-golang16
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.16
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-nodejs10
+    params:
+    - name: build-name
+      value: builder-nodejs
+    - name: git-revision
+      value: nodejs-10
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-nodejs12
+    params:
+    - name: build-name
+      value: builder-nodejs
+    - name: git-revision
+      value: nodejs-12
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-jenkins-buildah
+    params:
+    - name: build-name
+      value: builder-buildah
+    - name: git-revision
+      value: $(params.git-revision)
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-nexus
+    params:
+    - name: build-name
+      value: docker-nexus
+    - name: git-revision
+      value: 3.29.2
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-nexus-proxy
+    params:
+    - name: build-name
+      value: nexus-proxy
+    - name: git-revision
+      value: release-2.7
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-sonarqube
+    params:
+    - name: build-name
+      value: sonarqube
+    - name: git-revision
+      value: 8.9.2
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-gitlab
+    params:
+    - name: build-name
+      value: gitlab
+    - name: git-revision
+      value: alauda/v13.12.15
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-gitlab-busybox
+    params:
+    - name: build-name
+      value: busybox
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: ops-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: check-gitlab-redis
+    params:
+    - name: build-name
+      value: redis-image
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: middleware-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+  triggers: {}

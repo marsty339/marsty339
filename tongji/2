@@ -1,0 +1,4 @@
+#!/bin/sh
+cat data.txt |awk -F ',' '{if($3=="tekton")a[$1]++}END{for(i in a){print i,a[i]}}'>f1
+cat data.txt |awk -F ',' '{a[$1]++}END{for(i in a){print i,a[i]}}'>f2
+awk '{ if (NR==FNR) {arraya[$1]=$2} if (NR!=FNR) { arrayb[$1]=$2}}END{for (i in arraya) {print i","arraya[i]"/"arrayb[i]","int((arraya[i]/arrayb[i])*100)"%"}} ' f1 f2>f3

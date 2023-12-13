@@ -1,0 +1,494 @@
+apiVersion: deliveries.katanomi.dev/v1alpha1
+kind: Delivery
+metadata:
+  annotations:
+    deliveries.katanomi.dev/roleBinding: "true"
+    displayName: ""
+  name: packager-devops-katanomi-operator
+  namespace: devops
+spec:
+  historyLimits:
+    count: 10
+  params:
+  - default: master
+    name: git-revision
+    type: string
+  - default:
+    - katanomi
+    - gitinit
+    - katanomi-tools
+    - golang-1-15
+    - golang-1-17
+    - golang-1-18
+    - python
+    - java-18
+    - java-17
+    - trivy
+    - busybox
+    - ubi
+    - knsettings
+    - task
+    - buildkit
+    name: components
+    type: array
+  runPolicy: Serial
+  stages:
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: devops
+    name: katanomi-check
+    params:
+    - name: build-name
+      value: katanomi
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: devops
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: katanomi
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: devops
+    name: values-update
+    params:
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: git-url
+      value: https://gitlab-ce.alauda.cn/devops/katanomi.git
+    - name: path
+      value: ./charts/0.5.0/values.yaml
+    - name: build-name
+      value: katanomi
+    - name: artifacts
+      value:
+      - $(stages.katanomi-check.results.ociContainerImageBuild-url[*])
+      - $(stages.gitinit-check.results.ociContainerImageBuild-url[*])
+      - $(stages.katanomi-tools-check.results.ociContainerImageBuild-url[*])
+      - $(stages.golang-1-15-check.results.ociContainerImageBuild-url[*])
+      - $(stages.golang-1-17-check.results.ociContainerImageBuild-url[*])
+      - $(stages.golang-1-18-check.results.ociContainerImageBuild-url[*])
+      - $(stages.python-check.results.ociContainerImageBuild-url[*])
+      - $(stages.java-18-check.results.ociContainerImageBuild-url[*])
+      - $(stages.java-17-check.results.ociContainerImageBuild-url[*])
+      - $(stages.trivy-check.results.ociContainerImageBuild-url[*])
+      - $(stages.busybox-check.results.ociContainerImageBuild-url[*])
+      - $(stages.ubi-check.results.ociContainerImageBuild-url[*])
+      - $(stages.knsettings-check.results.ociContainerImageBuild-url[*])
+      - $(stages.task-check.results.ociContainerImageBuild-url[*])
+      - $(stages.buildkit-check.results.ociContainerImageBuild-url[*])
+    runAfter:
+    - katanomi-check
+    - gitinit-check
+    - katanomi-tools-check
+    - golang-1-15-check
+    - golang-1-17-check
+    - golang-1-18-check
+    - python-check
+    - java-18-check
+    - java-17-check
+    - trivy-check
+    - busybox-check
+    - ubi-check
+    - knsettings-check
+    - task-check
+    - buildkit-check
+    stageRef:
+      kind: ClusterStage
+      name: yaml-update-commit
+    timeout: 0s
+    workspaces:
+    - name: source
+      volumeClaimTemplate:
+        metadata:
+          creationTimestamp: null
+        spec:
+          accessModes:
+          - ReadWriteMany
+          resources:
+            requests:
+              storage: 200Mi
+        status: {}
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: katanomi
+    name: gitinit-check
+    params:
+    - name: build-name
+      value: tekton-pipeline
+    - name: git-revision
+      value: alauda/release-v0.41.0
+    - name: namespace
+      value: katanomi
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: gitinit
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: devops
+    name: katanomi-tools-check
+    params:
+    - name: build-name
+      value: katanomi-tools
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: devops
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: katanomi-tools
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: golang-1-15-check
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.15
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: golang-1-15
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: golang-1-17-check
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.17
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: golang-1-17
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: golang-1-18-check
+    params:
+    - name: build-name
+      value: builder-go
+    - name: git-revision
+      value: golang-1.18
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: golang-1-18
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: python-check
+    params:
+    - name: build-name
+      value: builder-python
+    - name: git-revision
+      value: python-3.9
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: python
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: java-17-check
+    params:
+    - name: build-name
+      value: builder-java
+    - name: git-revision
+      value: openjdk-17
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: java-17
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: java-18-check
+    params:
+    - name: build-name
+      value: builder-java
+    - name: git-revision
+      value: openjdk8
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: java-18
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: trivy-check
+    params:
+    - name: build-name
+      value: builder-trivy
+    - name: git-revision
+      value: main
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: trivy
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: devops
+    name: busybox-check
+    params:
+    - name: build-name
+      value: busybox
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: ops-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: busybox
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: devops
+    name: ubi-check
+    params:
+    - name: build-name
+      value: ubi
+    - name: git-revision
+      value: $(params.git-revision)
+    - name: namespace
+      value: ops-dev
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: ubi
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: katanomi
+    name: knsettings-check
+    params:
+    - name: build-name
+      value: ktn-task
+    - name: git-revision
+      value: main
+    - name: namespace
+      value: katanomi
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: knsettings
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: katanomi
+    name: task-check
+    params:
+    - name: build-name
+      value: katanomi-catalog-tasks
+    - name: git-revision
+      value: main
+    - name: namespace
+      value: katanomi
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: task
+      operator: in
+      values:
+      - $(params.components[*])
+  - context:
+      environmentSpec:
+        clusterRef:
+          apiVersion: clusterregistry.k8s.io/v1alpha1
+          kind: Cluster
+          name: business-build
+          namespace: cpaas-system
+        namespaceRef:
+          name: tools
+    name: buildkit-check
+    params:
+    - name: build-name
+      value: builder-buildkit
+    - name: git-revision
+      value: v0.10.4
+    - name: namespace
+      value: tools
+    stageRef:
+      kind: ClusterStage
+      name: check-component-build
+    timeout: 0s
+    when:
+    - input: buildkit
+      operator: in
+      values:
+      - $(params.components[*])
+  triggers: {}

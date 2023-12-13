@@ -1,0 +1,12 @@
+#!/bin/sh
+output=`date  |awk  '{print $3"-"$2"-"$NF}'`
+package=`curl  http://package.alauda.cn:12345/IDC/ |grep online|grep  $output|sort -k2 -r |awk -F '<|>' '{print $3}'|head -1`
+wget http://package.alauda.cn:12345/IDC/$package
+tar -xf $package
+repo=`cat ./installer/res/artifacts.json |jq -r '.images[]|[.repository,.tag|tostring] |join(":")'`
+for i in $repo;do
+label=`skopeo inspect --tls-verify=false --override-os=linux  docker://registry.alauda.cn:60080/$i |jq -r .Labels.build`
+ns=`skopeo inspect --tls-verify=false --override-os=linux docker://registry.alauda.cn:60080/$i --tls-verify=false |jq -r .Labels.ns`
+team=`echo $i|awk -F '/' '{print $1}'`
+echo $team,$i,$label,$ns
+done
