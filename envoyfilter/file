@@ -1,0 +1,85 @@
+#替换content-type
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: lua-content-type
+spec:
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_OUTBOUND # 也可以改为SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+          name: envoy.lua
+          typed_config:
+            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+            inlineCode: |
+              function envoy_on_request(request_handle)
+                if request_handle:headers():get("content-type") == "application/json,application/x-www-form-urlencoded;charset=UTF-8" then
+                  request_handle:headers():replace("content-type","application/json;application/x-www-form-urlencoded;charset=UTF-8")
+                end
+              end
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND # 也可以改为SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+          name: envoy.lua
+          typed_config:
+            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+            inlineCode: |
+              function envoy_on_request(request_handle)
+                if request_handle:headers():get("content-type") == "application/json,application/x-www-form-urlencoded;charset=UTF-8" then
+                  request_handle:headers():replace("content-type","application/json;application/x-www-form-urlencoded;charset=UTF-8")
+                end
+              end
+#打印header
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: lua-content
+spec:
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND # 也可以改为SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+          name: envoy.lua
+          typed_config:
+            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+            inlineCode: |
+              function envoy_on_request(request_handle)
+                local request_headers = request_handle:headers()
+                for key, value in pairs(request_headers) do
+                  request_handle:logInfo("Request Header: " .. key .. " = " .. value)
+                end
+              end
+ 
+              function envoy_on_response(response_handle)
+                local response_headers = response_handle:headers()
+                for key, value in pairs(response_headers) do
+                  response_handle:logInfo("Response Header: " .. key .. " = " .. value)
+                end
+              end
