@@ -1,0 +1,14 @@
+---
+# Setup kubernetes cluster
+
+- name: Change hostname
+  include: tasks/01_change_hostname.yaml
+
+- name: Setup system configurations
+  include: tasks/02_setup_systemconfig.yaml
+
+- name: Install runtime Docker-ce
+  include: tasks/03_install_runtime.yaml
+
+- name: Install kubenetes tools
+  include: tasks/04_install_kubetools.yaml

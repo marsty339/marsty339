@@ -1,0 +1,27 @@
+---
+
+- name: Remove docker if installed from CentOS repo
+  yum:
+    name: ["docker", "docker-client", "docker-client-latest", "docker-common", "docker-latest", "docker-latest-logrotate", "docker-logrotate", "docker-engine"]
+    state: removed
+
+- name: Install yum utils
+  yum:
+    name: ["yum-utils", "device-mapper-persistent-data", "lvm2"]
+    state: latest
+
+- name: Add Docker repo
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+
+- name: Install Docker
+  yum:
+    name: docker-ce
+    state: latest
+
+- name: Start Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes

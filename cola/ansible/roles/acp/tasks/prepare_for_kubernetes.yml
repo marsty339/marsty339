@@ -1,0 +1,15 @@
+---
+
+# 关闭 swap
+- name: Disabling Swap on all nodes
+  shell: swapoff -a
+
+# 关闭 自动挂载
+- name: Commenting Swap entries in /etc/fstab
+  replace:
+    path: /etc/fstab
+    regexp: '(^/.*swap*)'
+    replace: '# \1'
+
+#关闭防火墙
+- name: Disable firewall

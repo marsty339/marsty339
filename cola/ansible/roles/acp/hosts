@@ -1,0 +1,16 @@
+[Init]
+server154  ansible_host=192.168.25.154	ansible_user=root ansible_port=1022
+
+[Masters]
+server155  ansible_host=192.168.25.155 	ansible_user=root ansible_port=1022
+server156  ansible_host=192.168.25.156	ansible_user=root ansible_port=1022
+server157  ansible_host=192.168.25.157  ansible_user=root ansible_port=1022
+
+[Nodes]
+server188  ansible_host=192.168.16.188	
+server189  ansible_host=192.168.16.189
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python2
+ansible_user=root
+ansible_port=1022

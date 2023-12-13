@@ -1,0 +1,33 @@
+[masters]
+edge-global-master1 ansible_host=192.168.162.11
+edge-global-master2 ansible_host=192.168.162.12
+edge-global-master3 ansible_host=192.168.162.13
+
+[workers]
+edge-global-worker1 ansible_host=192.168.162.14
+edge-global-worker2 ansible_host=192.168.162.15
+edge-global-worker3 ansible_host=192.168.162.16
+
+[lb]
+edge-global-lb ansible_host=192.168.162.10
+
+
+[build-masters]
+edge-build-master1 ansible_host=192.168.162.17
+edge-build-master1 ansible_host=192.168.162.18
+edge-build-master1 ansible_host=192.168.162.19
+
+[cluster]
+edge-global-lb
+edge-global-master1
+edge-global-master2
+edge-global-master3
+edge-global-worker1
+edge-global-worker2
+edge-global-worker3
+
+
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python
+ansible_user=root

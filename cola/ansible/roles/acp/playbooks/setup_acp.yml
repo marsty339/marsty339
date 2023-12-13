@@ -1,0 +1,34 @@
+---
+
+- hosts: Servers
+  become: yes
+  tasks:
+#    - name: init os environment
+#      script: ./files/init.sh 
+#    
+#    - name: add yum repo
+#      script: ./files/add_repo.sh 
+     
+     - name: override resolv.conf
+       copy:
+         src: ./files/resolv.conf
+         dest: /etc/
+     
+     - name: set hostname
+       
+#    - name: install tools
+#      yum:
+#        name:
+#          - epel-release
+#          - curl
+#          - tar
+#          - openssh
+#          - sshpass
+#          - jq
+#          - net-tools
+#          - ntpdate
+#          - openssl
+# 
+    - name: reboot hosts
+      reboot:
+        reboot_timeout: 300  

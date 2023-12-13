@@ -1,0 +1,16 @@
+{
+    "insecure-registries": [
+        "192.168.25.154:60080",
+        "registry.tke.com"
+    ],
+    "ip-masq": false,
+    "iptables": false,
+    "log-opts": {
+      "max-size": "100m",
+      "max-file": "1"
+    },
+    "live-restore": true,
+    "metrics-addr" : "0.0.0.0:9323",
+    "experimental" : true,
+    "storage-driver": "overlay2"
+}

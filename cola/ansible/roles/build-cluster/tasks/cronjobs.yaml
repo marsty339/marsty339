@@ -1,0 +1,8 @@
+---
+  # Cron jobs in hosts
+  - name: Clean unused docker objects as cronjob
+    cron:
+      name: "docker clean"
+      minute: "0"
+      hour: "6"
+      job: "docker system prune --volumes -f"

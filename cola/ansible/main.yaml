@@ -1,0 +1,14 @@
+---
+#- hosts: lb
+#  tasks:
+#    - name: Upgrade kernel
+#      ansible.builtin.include_tasks: ./roles/acp/tasks/upgrade_kernel.yml
+
+- hosts: cluster
+  tasks:
+    #    - name: Upgrade kernel
+    #      ansible.builtin.include_tasks: ./roles/acp/tasks/upgrade_kernel.yml
+    #    - name: Init the os
+    #      ansible.builtin.include_tasks: ./roles/acp/tasks/init_os.yaml
+    - name: Add hosts
+      ansible.builtin.include_tasks: ./roles/acp/tasks/add_hosts.yaml

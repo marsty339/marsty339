@@ -1,0 +1,5 @@
+---
+
+- hosts: Tmp
+  tasks:
+    - include: ./tasks/install_docker-ce.yml

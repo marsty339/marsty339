@@ -1,0 +1,39 @@
+---
+
+- name: Add yum repository
+  yum_repository:
+    name: kubernetes
+    description: kubernetes YUM repo
+    # This is for arm,check platform here
+    baseurl: https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-aarch64/
+    gpgkey:
+      - https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
+      - https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+    gpgcheck: yes
+
+- name: Add repository
+  yum_repository:
+    name: epel
+    description: EPEL YUM repo
+    baseurl:
+      - http://mirrors.aliyun.com/epel/7/$basearch
+      - http://mirrors.aliyun.com/epel/7/$basearch/debug
+      - http://mirrors.aliyun.com/epel/7/SRPMS
+    gpgcheck: no
+
+- name: Install kubernetes tools
+  yum:
+    name: ["kubelet", "kubectl", "kubeadm", kubernetes-cni]
+    disable_excludes: kubernetes
+    state: present
+
+
+- name: Enable kubelet service
+  service:
+    name: kubelet
+    state: started
+    enabled: yes
+
+- name: Reboot
+  reboot:
+    reboot_timeout: 180
