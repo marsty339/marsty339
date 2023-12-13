@@ -1,0 +1,27 @@
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+type MyError struct {
+	when  time.Time
+	where string
+}
+
+func (e *MyError) Error() string {
+	return fmt.Sprintf("at %v,%s", e.when, e.where)
+}
+
+func run() error {
+	return &MyError{
+		time.Now(),
+		"it didn't work",
+	}
+}
+func main() {
+	if e := run(); e != nil {
+		fmt.Println(e)
+	}
+}
